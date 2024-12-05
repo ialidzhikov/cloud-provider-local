@@ -24,7 +24,7 @@ func (c *LocalCloud) Instances() (cloudprovider.Instances, bool) {
 }
 
 func (c *LocalCloud) InstancesV2() (cloudprovider.InstancesV2, bool) {
-	return &LocalInstancesV2{client: c.SourceClient}, false
+	return &LocalInstancesV2{client: c.SourceClient}, true
 }
 
 func (c *LocalCloud) Zones() (cloudprovider.Zones, bool) {

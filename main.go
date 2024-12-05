@@ -21,7 +21,10 @@ limitations under the License.
 package main
 
 import (
+	"fmt"
 	"io"
+	"os"
+
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/clientcmd"
 	cloudprovider "k8s.io/cloud-provider"
@@ -35,7 +38,6 @@ import (
 	_ "k8s.io/component-base/metrics/prometheus/clientgo" // load all the prometheus client-go plugins
 	_ "k8s.io/component-base/metrics/prometheus/version"  // for version metric registration
 	"k8s.io/klog/v2"
-	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/gardener/cloud-provider-local/pkg/local"
@@ -43,11 +45,21 @@ import (
 	// e.g. _"k8s.io/legacy-cloud-providers/<provider>"
 )
 
-var sourceClient client.Client
+var kubeconfig string
 
 func init() {
 	cloudprovider.RegisterCloudProvider("local", func(config io.Reader) (cloudprovider.Interface, error) {
-		return &local.LocalCloud{sourceClient}, nil
+		restConfig, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build rest config: %w", err)
+		}
+
+		sourceClient, err := client.New(restConfig, client.Options{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create a source client: %w", err)
+		}
+
+		return &local.LocalCloud{SourceClient: sourceClient}, nil
 	})
 }
 
@@ -57,18 +69,10 @@ func main() {
 		klog.Fatalf("unable to initialize command options: %v", err)
 	}
 	fss := cliflag.NamedFlagSets{}
-	var kubeconfig string
 	fss.FlagSet("config").StringVar(&kubeconfig, "source-kubeconfig", "Default", "Path to a kubeconfig for the source cluster")
+
 	command := app.NewCloudControllerManagerCommand(ccmOptions, cloudInitializer, controllerInitializers(), names.CCMControllerAliases(), fss, wait.NeverStop)
 	code := cli.Run(command)
-	rest, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	if err != nil {
-		klog.Fatalf("Error building kubeconfig: %s", err.Error())
-	}
-	sourceClient, err = client.New(rest, client.Options{})
-	if err != nil {
-		klog.Fatalf("Error building source client: %s", err.Error())
-	}
 	os.Exit(code)
 }
 
