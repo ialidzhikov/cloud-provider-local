@@ -34,8 +34,11 @@ func (l LocalInstancesV2) InstanceExists(ctx context.Context, node *v1.Node) (bo
 }
 
 func (l LocalInstancesV2) InstanceShutdown(ctx context.Context, node *v1.Node) (bool, error) {
-	//TODO implement me
-	panic("implement me")
+	// A terminated Node Pod is already removed from store.
+	// Hence, for now we always return that the instace is not shut-down.
+	// We should not return true when the Node Pod does not exists.
+	// See https://github.com/kubernetes/cloud-provider-aws/blob/e58b027f08820da1f3b523b5238adbcd4e7e85a2/pkg/providers/v1/aws.go#L943-L944
+	return false, nil
 }
 
 func (l LocalInstancesV2) InstanceMetadata(ctx context.Context, node *v1.Node) (*cloudprovider.InstanceMetadata, error) {
