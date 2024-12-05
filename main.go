@@ -22,9 +22,8 @@ package main
 
 import (
 	"io"
-	"os"
-
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/tools/clientcmd"
 	cloudprovider "k8s.io/cloud-provider"
 	"k8s.io/cloud-provider/app"
 	"k8s.io/cloud-provider/app/config"
@@ -36,15 +35,19 @@ import (
 	_ "k8s.io/component-base/metrics/prometheus/clientgo" // load all the prometheus client-go plugins
 	_ "k8s.io/component-base/metrics/prometheus/version"  // for version metric registration
 	"k8s.io/klog/v2"
+	"os"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/gardener/cloud-provider-local/pkg/local"
 	// For existing cloud providers, the option to import legacy providers is still available.
 	// e.g. _"k8s.io/legacy-cloud-providers/<provider>"
 )
 
+var sourceClient client.Client
+
 func init() {
 	cloudprovider.RegisterCloudProvider("local", func(config io.Reader) (cloudprovider.Interface, error) {
-		return &local.LocalCloud{}, nil
+		return &local.LocalCloud{sourceClient}, nil
 	})
 }
 
@@ -53,10 +56,19 @@ func main() {
 	if err != nil {
 		klog.Fatalf("unable to initialize command options: %v", err)
 	}
-
 	fss := cliflag.NamedFlagSets{}
+	var kubeconfig string
+	fss.FlagSet("config").StringVar(&kubeconfig, "source-kubeconfig", "Default", "Path to a kubeconfig for the source cluster")
 	command := app.NewCloudControllerManagerCommand(ccmOptions, cloudInitializer, controllerInitializers(), names.CCMControllerAliases(), fss, wait.NeverStop)
 	code := cli.Run(command)
+	rest, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	if err != nil {
+		klog.Fatalf("Error building kubeconfig: %s", err.Error())
+	}
+	sourceClient, err = client.New(rest, client.Options{})
+	if err != nil {
+		klog.Fatalf("Error building source client: %s", err.Error())
+	}
 	os.Exit(code)
 }
 
@@ -66,19 +78,19 @@ func main() {
 func controllerInitializers() map[string]app.ControllerInitFuncConstructor {
 	controllerInitializers := app.DefaultInitFuncConstructors
 	if constructor, ok := controllerInitializers[names.CloudNodeController]; ok {
-		constructor.InitContext.ClientName = "mycloud-external-cloud-node-controller"
+		constructor.InitContext.ClientName = "local-external-cloud-node-controller"
 		controllerInitializers[names.CloudNodeController] = constructor
 	}
 	if constructor, ok := controllerInitializers[names.CloudNodeLifecycleController]; ok {
-		constructor.InitContext.ClientName = "mycloud-external-cloud-node-lifecycle-controller"
+		constructor.InitContext.ClientName = "local-external-cloud-node-lifecycle-controller"
 		controllerInitializers[names.CloudNodeLifecycleController] = constructor
 	}
 	if constructor, ok := controllerInitializers[names.ServiceLBController]; ok {
-		constructor.InitContext.ClientName = "mycloud-external-service-controller"
+		constructor.InitContext.ClientName = "local-external-service-controller"
 		controllerInitializers[names.ServiceLBController] = constructor
 	}
 	if constructor, ok := controllerInitializers[names.NodeRouteController]; ok {
-		constructor.InitContext.ClientName = "mycloud-external-route-controller"
+		constructor.InitContext.ClientName = "local-external-route-controller"
 		controllerInitializers[names.NodeRouteController] = constructor
 	}
 	return controllerInitializers

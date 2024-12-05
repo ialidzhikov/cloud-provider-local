@@ -2,9 +2,11 @@ package local
 
 import (
 	cloudprovider "k8s.io/cloud-provider"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type LocalCloud struct {
+	SourceClient client.Client
 }
 
 var _ cloudprovider.Interface = &LocalCloud{}
@@ -22,7 +24,7 @@ func (c *LocalCloud) Instances() (cloudprovider.Instances, bool) {
 }
 
 func (c *LocalCloud) InstancesV2() (cloudprovider.InstancesV2, bool) {
-	return nil, false
+	return &LocalInstancesV2{client: c.SourceClient}, false
 }
 
 func (c *LocalCloud) Zones() (cloudprovider.Zones, bool) {
